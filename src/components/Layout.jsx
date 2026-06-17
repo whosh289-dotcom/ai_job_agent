@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { Bot, Calendar, History, Zap, Menu, X, User, LogIn, Linkedin, Check } from 'lucide-react'
+import { Bot, Calendar, History, Zap, MessageSquare, Menu, X, User, LogIn, Linkedin, Check } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../lib/auth'
 import AuthModal from './AuthModal'
@@ -15,6 +15,7 @@ export default function Layout({ children }) {
 
   const navItems = [
     { to: '/', icon: Zap, label: 'Dashboard' },
+    { to: '/ai-chat', icon: MessageSquare, label: 'AI Chat' },
     { to: '/schedule', icon: Calendar, label: 'Schedule' },
     { to: '/history', icon: History, label: 'History' },
   ]

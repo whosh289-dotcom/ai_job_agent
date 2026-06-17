@@ -1,12 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Zap, Play, Loader2, Bot, Briefcase, FileText, Users, Target } from 'lucide-react'
+import { Zap, Play, Loader2, Bot, Briefcase, FileText, Users, Target, MessageSquare, Sparkles, Copy, Check } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { getApiKey } from '../lib/ai'
+import ApiKeySetup from '../components/ApiKeySetup'
 
 async function fetchApi(url, options = {}) {
   const res = await fetch(url, {
     ...options,
     headers: { 'Content-Type': 'application/json', ...options.headers },
-    body: options.body ? JSON.stringify(options.body) : undefined,
+    body: options.body ? JSON.stringify({ ...options.body, apiKey: getApiKey() }) : undefined,
   })
   if (!res.ok) throw new Error((await res.json()).error || 'Request failed')
   return res.json()
@@ -24,6 +27,8 @@ export default function Dashboard() {
   const queryClient = useQueryClient()
   const [selectedAgent, setSelectedAgent] = useState('commander')
   const [input, setInput] = useState('')
+  const [result, setResult] = useState(null)
+  const [copied, setCopied] = useState(false)
 
   const { data: runs = [], isLoading } = useQuery({
     queryKey: ['runs'],
@@ -32,19 +37,51 @@ export default function Dashboard() {
 
   const runAgent = useMutation({
     mutationFn: (data) => fetchApi(`/api/agents/${selectedAgent}`, { method: 'POST', body: data }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['runs'] }),
+    onSuccess: (data) => {
+      setResult(data.result)
+      queryClient.invalidateQueries({ queryKey: ['runs'] })
+    },
   })
 
   const handleRun = () => {
     if (!input.trim()) return
+    setResult(null)
     runAgent.mutate({ input: input.trim() })
+  }
+
+  const handleCopy = () => {
+    if (result) {
+      navigator.clipboard.writeText(result)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
   }
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <p className="text-slate-400 mt-1">Run AI agents to automate your job search</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <p className="text-slate-400 mt-1">Run AI agents powered by Gemini 2.0 Flash</p>
+        </div>
+        <Link
+          to="/ai-chat"
+          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg font-medium flex items-center gap-2 transition-colors"
+        >
+          <MessageSquare className="w-4 h-4" />
+          Open AI Chat
+        </Link>
+      </div>
+
+      {/* AI Status Banner */}
+      <div className="bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20 rounded-xl p-4 flex items-center gap-4">
+        <div className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-cyan-400 rounded-lg flex items-center justify-center">
+          <Sparkles className="w-5 h-5 text-slate-900" />
+        </div>
+        <div>
+          <p className="font-medium text-emerald-400">Gemini 2.0 Flash Active</p>
+          <p className="text-sm text-slate-400">All agents now use the most advanced free AI model for job search automation.</p>
+        </div>
       </div>
 
       {/* Agent Grid */}
@@ -55,13 +92,17 @@ export default function Dashboard() {
             onClick={() => setSelectedAgent(agent.id)}
             className={`p-4 rounded-xl border transition-all text-left ${
               selectedAgent === agent.id
-                ? `bg-${agent.color}-500/20 border-${agent.color}-500/50`
+                ? 'bg-emerald-500/10 border-emerald-500/40'
                 : 'bg-slate-800 border-slate-700 hover:border-slate-600'
             }`}
           >
             <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-lg bg-${agent.color}-500/20 flex items-center justify-center`}>
-                <agent.icon className={`w-5 h-5 text-${agent.color}-400`} />
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                selectedAgent === agent.id ? 'bg-emerald-500/20' : 'bg-slate-700'
+              }`}>
+                <agent.icon className={`w-5 h-5 ${
+                  selectedAgent === agent.id ? 'text-emerald-400' : 'text-slate-400'
+                }`} />
               </div>
               <div>
                 <h3 className="font-semibold">{agent.name}</h3>
@@ -90,7 +131,7 @@ export default function Dashboard() {
             {runAgent.isPending ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                Running...
+                Running with Gemini 2.0 Flash...
               </>
             ) : (
               <>
@@ -100,6 +141,40 @@ export default function Dashboard() {
             )}
           </button>
         </div>
+
+        {/* Result Display */}
+        {result && (
+          <div className="mt-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-emerald-400">AI Result</h3>
+              <button
+                onClick={handleCopy}
+                className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-3 h-3" />
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3" />
+                    Copy
+                  </>
+                )}
+              </button>
+            </div>
+            <div className="bg-slate-900 rounded-lg border border-slate-700 p-4 max-h-96 overflow-y-auto">
+              <pre className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">{result}</pre>
+            </div>
+          </div>
+        )}
+
+        {runAgent.isError && (
+          <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+            {runAgent.error?.message || 'Failed to run agent. Please try again.'}
+          </div>
+        )}
       </div>
 
       {/* Recent Runs */}

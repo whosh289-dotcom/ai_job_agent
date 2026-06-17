@@ -10,6 +10,7 @@ app.use(express.json())
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 if (!supabaseUrl || !supabaseKey) {
   console.error('Missing Supabase credentials')
@@ -18,137 +19,38 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey)
 
-// AI Agent execution simulation
-async function runAgent(agentType, input) {
-  const delay = Math.random() * 2000 + 1000
-  await new Promise(r => setTimeout(r, delay))
+// Helper: call the AI proxy edge function
+async function callAiProxy(messages, systemPrompt, apiKey) {
+  const res = await fetch(`${supabaseUrl}/functions/v1/ai-proxy`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${serviceRoleKey || supabaseKey}`,
+    },
+    body: JSON.stringify({ messages, systemPrompt, apiKey }),
+  })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.error || 'AI proxy error')
+  }
+  const data = await res.json()
+  return data.text || ''
+}
 
-  const outputs = {
-    commander: `Job Search Pipeline Executed Successfully
-
-════════════════════════════
-AGENT 1 — LINKEDIN OPTIMIZER
-════════════════════════════
-Headline optimized for: ${input}
-Profile updated with relevant keywords
-Skills section refreshed with trending terms
-
-════════════════════════════
-AGENT 2 — JOB SCANNER
-════════════════════════════
-Scanned LinkedIn, Indeed, Glassdoor
-Found 25 relevant positions
-Top matches identified based on criteria
-
-════════════════════════════
-AGENT 3 — RESUME CUSTOMIZER
-════════════════════════════
-ATS keywords extracted
-Bullet points optimized for impact
-Summary tailored to target role
-
-════════════════════════════
-AGENT 4 — RECRUITER OUTREACH
-════════════════════════════
-Connection notes drafted
-Follow-up sequence planned
-12 recruiters identified for outreach`,
-
-    'job-scanner': `Job Search Results for: ${input}
-
-Search Results Summary:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-LinkedIn Jobs: 15 matches
-Indeed: 32 matches
-Glassdoor: 18 matches
-
-Top 5 Matches:
-1. Senior Engineer - TechCorp (Remote) - $140k-180k
-   Match Score: 95%
-   Requirements: 5+ years experience, cloud platforms
-
-2. Lead Developer - StartupXYZ (NYC) - $150k-200k
-   Match Score: 90%
-   Requirements: Full stack, team leadership
-
-3. Principal Engineer - BigTech (SF) - $180k-250k
-   Match Score: 88%
-   Requirements: 10+ years, system design
-
-4. Staff Engineer - GrowthCo (Remote) - $160k-210k
-   Match Score: 85%
-   Requirements: Architecture, mentoring
-
-5. Senior SWE - FinanceHub (Chicago) - $130k-170k
-   Match Score: 82%
-   Requirements: Java, distributed systems`,
-
-    'linkedin-optimizer': `LinkedIn Profile Optimization for: ${input}
-
-Optimized Headline:
-"Senior Engineer | Building Scalable Systems | Cloud Architecture | Team Leadership"
-
-About Section (Rewritten):
-Accomplished software engineer with 8+ years building high-impact products. Expert in distributed systems and cloud architecture. Led teams of 5-15 engineers delivering products used by millions. Passionate about clean code, mentoring, and driving technical excellence.
-
-Skills Highlighted:
-• Cloud Architecture (AWS/GCP)
-• Distributed Systems
-• Team Leadership
-• System Design
-• Agile Methodologies
-
-Open-to-Work Settings Updated:
-Status: Actively looking
-Roles: Senior Engineer, Staff Engineer, Principal
-Locations: Remote, NYC, SF
-Salary Range: $150k-200k`,
-
-    'resume-customizer': `Resume Customization for: ${input}
-
-ATS Keyword Analysis:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Keywords Added: 24
-Keywords Optimized: 15
-ATS Score: 92%
-
-Bullet Point Improvements:
-
-Before: "Worked on backend services"
-After: "Architected and maintained 15+ microservices handling 10M+ daily requests with 99.9% uptime"
-
-Before: "Led a team"
-After: "Led cross-functional team of 12 engineers, delivering 3 major product launches and increasing revenue by 40%"
-
-Before: "Used AWS"
-After: "Designed serverless architecture on AWS reducing infrastructure costs by 60% and improving deployment speed by 80%"
-
-Final Resume Score: 94/100`,
-
-    'recruiter-outreach': `Recruiter Outreach Strategy for: ${input}
-
-Connection Notes Generated: 5
-
-1. TechCorp - Sarah Johnson (Tech Recruiter)
-   "Hi Sarah, I noticed TechCorp's impressive growth in the AI space. As a senior engineer with experience in scalable systems, I'd love to connect and learn about opportunities on your engineering teams."
-
-2. StartupXYZ - Mike Chen (Engineering Recruiter)
-   "Hi Mike, saw your posts about StartupXYZ's engineering culture. I'm a senior full-stack engineer excited about joining fast-growing teams. Would love to chat about open roles!"
-
-Follow-up Templates Created:
-• Initial outreach: 150 characters
-• Post-connection: 300 characters
-• Post-application: 250 characters
-• 1-week follow-up: 200 characters
-
-Recommended Outreach Order:
-1. TechCorp (highest match score)
-2. StartupXYZ (culture fit)
-3. GrowthCo (remote friendly)`
+// AI Agent execution with real model
+async function runAgent(agentType, input, userProfile, apiKey) {
+  const systemPrompts = {
+    commander: `You are JobAgent Commander, a senior AI career strategist. Orchestrate a complete job search pipeline. Generate realistic, detailed, actionable results with specific numbers, company names, and concrete advice.`,
+    'job-scanner': `You are a Job Scanner AI. Scan job boards for matching positions. Provide realistic job listings with company names, salary ranges, locations, and match scores. Include 5-8 detailed listings.`,
+    'linkedin-optimizer': `You are a LinkedIn Profile Optimization AI. Rewrite the user's headline, about section, and skills for maximum recruiter appeal. Provide exact copy-paste ready text.`,
+    'resume-customizer': `You are a Resume Customization AI. Provide ATS-optimized resume improvements with before/after bullet points, keyword analysis, and formatting tips.`,
+    'recruiter-outreach': `You are a Recruiter Outreach AI. Generate personalized LinkedIn connection messages and follow-up sequences. Provide 3-5 templates with company names and a follow-up timeline.`,
   }
 
-  return outputs[agentType] || `Agent ${agentType} processed: ${input}`
+  const systemPrompt = systemPrompts[agentType] || systemPrompts.commander
+  const userContent = `User Profile:\n${JSON.stringify(userProfile, null, 2)}\n\nJob Search Criteria:\n${input}\n\nProvide detailed, actionable results.`
+
+  return callAiProxy([{ role: 'user', content: userContent }], systemPrompt, apiKey)
 }
 
 // API: Get run history
@@ -160,7 +62,6 @@ app.get('/api/history/runs', async (req, res) => {
     .limit(50)
 
   if (error) return res.status(500).json({ error: error.message })
-  // Transform to camelCase for frontend
   const transformed = (data || []).map(row => ({
     id: row.id,
     linkedinSub: row.linkedin_sub,
@@ -190,9 +91,10 @@ app.get('/api/history/outreach', async (req, res) => {
 // API: Run agent
 app.post('/api/agents/:agentType', async (req, res) => {
   const { agentType } = req.params
-  const { input } = req.body
+  const { input, apiKey } = req.body
 
   if (!input) return res.status(400).json({ error: 'Input required' })
+  if (!apiKey) return res.status(400).json({ error: 'Gemini API key required. Get a free key at ai.google.dev' })
 
   const { data: run, error: createError } = await supabase
     .from('agent_runs')
@@ -207,8 +109,22 @@ app.post('/api/agents/:agentType', async (req, res) => {
 
   if (createError) return res.status(500).json({ error: createError.message })
 
+  // Get user profile for context
+  let userProfile = {}
   try {
-    const result = await runAgent(agentType, input)
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+    if (profile) userProfile = profile
+  } catch (e) {
+    // ignore
+  }
+
+  try {
+    const result = await runAgent(agentType, input, userProfile, apiKey)
     await supabase
       .from('agent_runs')
       .update({
@@ -233,7 +149,6 @@ app.get('/api/scheduler/jobs', async (req, res) => {
     .order('created_at', { ascending: false })
 
   if (error) return res.status(500).json({ error: error.message })
-  // Transform to camelCase
   const transformed = (data || []).map(row => ({
     id: row.id,
     linkedinSub: row.linkedin_sub,
@@ -324,6 +239,11 @@ app.delete('/api/scheduler/jobs/:id', async (req, res) => {
 
 // API: Trigger scheduler
 app.post('/api/scheduler/trigger', async (req, res) => {
+  const { apiKey } = req.body
+  if (!apiKey) {
+    return res.status(400).json({ error: 'Gemini API key required for scheduled runs' })
+  }
+
   let executed = 0
   const now = new Date()
 
@@ -345,12 +265,19 @@ app.post('/api/scheduler/trigger', async (req, res) => {
       }).select().single()
 
       if (run) {
-        const result = await runAgent('job-scanner', input)
-        await supabase.from('agent_runs').update({
-          result,
-          status: 'done',
-          completed_at: new Date().toISOString(),
-        }).eq('id', run.id)
+        try {
+          const result = await runAgent('job-scanner', input, {}, apiKey)
+          await supabase.from('agent_runs').update({
+            result,
+            status: 'done',
+            completed_at: new Date().toISOString(),
+          }).eq('id', run.id)
+        } catch (err) {
+          await supabase.from('agent_runs').update({
+            status: 'error',
+            result: err.message,
+          }).eq('id', run.id)
+        }
 
         const nextRun = new Date(now)
         if (job.frequency === 'hourly') nextRun.setHours(nextRun.getHours() + 1)
@@ -371,59 +298,76 @@ app.post('/api/scheduler/trigger', async (req, res) => {
 })
 
 // 24/7 Scheduler - runs every minute
-cron.schedule('* * * * *', async () => {
-  console.log('[Scheduler] Checking for pending jobs...')
-  try {
-    // Call the trigger logic directly instead of HTTP fetch
-    const now = new Date()
-    const { data: jobs } = await supabase
-      .from('scheduled_jobs')
-      .select('*')
-      .eq('is_active', true)
-      .lte('next_run_at', now.toISOString())
+// Note: This requires a global API key to work. If none is set, it skips.
+const SCHEDULER_API_KEY = process.env.GEMINI_API_KEY || ''
 
-    let executed = 0
-    if (jobs) {
-      for (const job of jobs) {
-        const input = `${job.target_role} - ${job.job_goal}. Location: ${job.location || 'Any'}. Skills: ${job.skills || 'Not specified'}`
+if (SCHEDULER_API_KEY) {
+  cron.schedule('* * * * *', async () => {
+    console.log('[Scheduler] Checking for pending jobs...')
+    try {
+      const now = new Date()
+      const { data: jobs } = await supabase
+        .from('scheduled_jobs')
+        .select('*')
+        .eq('is_active', true)
+        .lte('next_run_at', now.toISOString())
 
-        const { data: run } = await supabase.from('agent_runs').insert({
-          agent_type: 'job-scanner',
-          input,
-          status: 'running',
-          created_at: now.toISOString(),
-        }).select().single()
+      let executed = 0
+      if (jobs) {
+        for (const job of jobs) {
+          const input = `${job.target_role} - ${job.job_goal}. Location: ${job.location || 'Any'}. Skills: ${job.skills || 'Not specified'}`
 
-        if (run) {
-          const result = await runAgent('job-scanner', input)
-          await supabase.from('agent_runs').update({
-            result,
-            status: 'done',
-            completed_at: new Date().toISOString(),
-          }).eq('id', run.id)
+          const { data: run } = await supabase.from('agent_runs').insert({
+            agent_type: 'job-scanner',
+            input,
+            status: 'running',
+            created_at: now.toISOString(),
+          }).select().single()
 
-          const nextRun = new Date(now)
-          if (job.frequency === 'hourly') nextRun.setHours(nextRun.getHours() + 1)
-          else if (job.frequency === 'daily') nextRun.setDate(nextRun.getDate() + 1)
-          else nextRun.setDate(nextRun.getDate() + 7)
+          if (run) {
+            try {
+              const result = await runAgent('job-scanner', input, {}, SCHEDULER_API_KEY)
+              await supabase.from('agent_runs').update({
+                result,
+                status: 'done',
+                completed_at: new Date().toISOString(),
+              }).eq('id', run.id)
+            } catch (err) {
+              await supabase.from('agent_runs').update({
+                status: 'error',
+                result: err.message,
+              }).eq('id', run.id)
+            }
 
-          await supabase.from('scheduled_jobs').update({
-            last_run_at: now.toISOString(),
-            next_run_at: nextRun.toISOString(),
-          }).eq('id', job.id)
+            const nextRun = new Date(now)
+            if (job.frequency === 'hourly') nextRun.setHours(nextRun.getHours() + 1)
+            else if (job.frequency === 'daily') nextRun.setDate(nextRun.getDate() + 1)
+            else nextRun.setDate(nextRun.getDate() + 7)
 
-          executed++
+            await supabase.from('scheduled_jobs').update({
+              last_run_at: now.toISOString(),
+              next_run_at: nextRun.toISOString(),
+            }).eq('id', job.id)
+
+            executed++
+          }
         }
       }
+      console.log(`[Scheduler] Executed ${executed} job(s)`)
+    } catch (err) {
+      console.error('[Scheduler Error]', err.message)
     }
-    console.log(`[Scheduler] Executed ${executed} job(s)`)
-  } catch (err) {
-    console.error('[Scheduler Error]', err.message)
-  }
-})
+  })
+} else {
+  console.log('[Scheduler] Skipping background scheduler - no GEMINI_API_KEY set')
+}
 
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
   console.log(`JobAgent AI Server running on port ${PORT}`)
-  console.log('24/7 Scheduler active - checking every minute')
+  if (SCHEDULER_API_KEY) {
+    console.log('24/7 Scheduler active - checking every minute')
+  } else {
+    console.log('24/7 Scheduler inactive - set GEMINI_API_KEY to enable')
+  }
 })

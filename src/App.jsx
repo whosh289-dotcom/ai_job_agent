@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import Schedule from './pages/Schedule'
 import History from './pages/History'
+import AIChatPage from './pages/AIChatPage'
 import Layout from './components/Layout'
 
 function App() {
@@ -12,6 +13,7 @@ function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/schedule" element={<Schedule />} />
           <Route path="/history" element={<History />} />
+          <Route path="/ai-chat" element={<AIChatPage />} />
         </Routes>
       </Layout>
     </BrowserRouter>
